@@ -23,11 +23,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # What to watch lives in watches.json; only credentials and the default
+      # timezone come from repo secrets/variables.
       - name: Run showtime check
         env:
-          MOVIE_SLUG: ${{ vars.MOVIE_SLUG }}
-          MOVIE_BASE_URL: ${{ vars.MOVIE_BASE_URL }}
-          TARGET_WEEKDAY: ${{ vars.TARGET_WEEKDAY }}
           TIMEZONE: ${{ vars.TIMEZONE }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

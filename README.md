@@ -1,21 +1,70 @@
-# Scene Cinemas Showtime Notifier
+# Cinema Showtime Notifier
 
-Polls [Scene Cinemas — District 5](https://district5.scenecinemas.com/) every 20 minutes via GitHub Actions and sends you a Telegram message the moment showtimes go live for a specific movie on the next occurrence of a target weekday (e.g. next Friday). One notification per target date — no spam.
+Polls cinema sites every 10 minutes via GitHub Actions and sends you a Telegram message the moment showtimes go live for a movie on a date you care about. One notification per watch per target date — no spam.
+
+Two sites are supported:
+
+- **`scene`** — [Scene Cinemas District 5](https://district5.scenecinemas.com/)
+- **`vox`** — [VOX Cinemas Egypt](https://egy.voxcinemas.com/)
+
+## What's being watched
+
+Watches are declared in [`watches.json`](watches.json). The current set:
+
+| id | site | movie | cinema | target date | notifies when |
+| --- | --- | --- | --- | --- | --- |
+| `odyssey-d5-friday` | scene | `the-odyssey` | District 5 | next Friday (rolling) | showtimes are published |
+| `spiderman-almaza-aug6` | vox | `spider-man-brand-new-day` | City Centre Almaza | 2026-08-06 (fixed) | a showtime is **bookable** |
+
+Each run checks every watch independently — one failing site can't stop the others, and each gets its own Telegram message and its own dedupe entry.
+
+### Published vs bookable
+
+Both sites list showtimes for a date *before* opening sales, so `notify_on` picks the trigger:
+
+- **`published`** (default) — fire as soon as any showtime appears, bookable or not.
+- **`bookable`** — hold off until at least one showtime can actually be booked. Nothing is
+  recorded while waiting, so the watch keeps checking every run and fires the moment sales open.
 
 ## How it works
 
-1. A scheduled workflow runs `check_showtimes.py` every 20 minutes.
-2. The script computes the next target weekday in `Africa/Cairo` (or whatever timezone you set).
-3. It fetches the movie's AJAX showtimes fragment for that date:
-   `https://district5.scenecinemas.com/movie-details/<movie>.html?business_day=<DD-MM-YYYY>&ajax=1`.
-   Scene Cinemas only publishes a rolling window of upcoming dates, so a date with no
-   showtimes scheduled yet returns an **empty** body — that's how "not available yet" is
-   detected. Once the target date goes live, the fragment contains showtimes grouped by
-   experience (IMAX, Premiere, Standard & Deluxe), each with a booking link or a
-   struck-through "sold out" marker.
-4. If showtimes are found and `state.json` shows it has not already notified for this date,
-   it posts a Telegram message and writes the date back to `state.json`. The workflow then
-   commits the updated `state.json` to the repo.
+1. A scheduled workflow runs `check_showtimes.py` every 10 minutes.
+2. For each watch it resolves the target date: either a fixed calendar date, or the next occurrence of a weekday in the watch's timezone.
+3. It fetches that date's showtimes. Both sites publish only a rolling window of upcoming dates, so a date that isn't published yet comes back with no showtimes — that's how "not available yet" is detected:
+   - **scene** returns an **empty body** from its AJAX fragment
+     (`…/movie-details/<movie>.html?business_day=DD-MM-YYYY&ajax=1`).
+   - **vox** returns a full page carrying *"No showtimes could be found…"*
+     (`/showtimes?c=<cinema>&m=<movie>&d=YYYYMMDD`).
+4. Once showtimes appear, they're grouped by experience (IMAX / Premiere / Standard & Deluxe on Scene; GOLD / 4DX / Standard on VOX), each with a booking link or a struck-through marker. Scene distinguishes genuine sell-outs (`sold out`); VOX has a single "unavailable" state covering both sold out and not-yet-on-sale, so it's labelled `not bookable`.
+5. If the watch's `notify_on` trigger is met and `state.json` shows it hasn't already notified for this date, it posts to Telegram and records the date. The workflow commits the updated `state.json` back to the repo.
+
+## Adding or changing a watch
+
+Edit `watches.json` and commit — no code change needed.
+
+```json
+{
+  "id": "unique-slug",
+  "site": "vox",
+  "movie_slug": "spider-man-brand-new-day",
+  "cinema_slug": "city-centre-almaza",
+  "target": { "date": "2026-08-06" },
+  "notify_on": "bookable"
+}
+```
+
+| field | required | notes |
+| --- | --- | --- |
+| `id` | yes | Unique; used as the `state.json` dedupe key. Renaming it re-arms the watch. |
+| `site` | yes | `scene` or `vox`. |
+| `movie_slug` | yes | From the movie URL, e.g. `.../movie-details/the-odyssey.html` → `the-odyssey`. |
+| `cinema_slug` | vox only | From the VOX showtimes URL's `c=` parameter. |
+| `target` | yes | Exactly one of `{"weekday": "friday"}` or `{"date": "2026-08-06"}`. |
+| `notify_on` | no | `published` (default) or `bookable`. See above. |
+| `timezone` | no | Defaults to the `TIMEZONE` repo variable, else `Africa/Cairo`. |
+| `base_url` | no | scene only; overrides the movie-details URL. `{movie}` is substituted. |
+
+Config errors (bad site, both/neither target kind, duplicate ids, malformed date, unknown `notify_on`) fail loudly at startup rather than silently not notifying. A fixed-date watch stops checking once its date has passed.
 
 ## One-time setup
 
@@ -27,8 +76,7 @@ Polls [Scene Cinemas — District 5](https://district5.scenecinemas.com/) every 
 ### 2. Find your chat ID
 
 - Send any message to your new bot (open its chat first via the link BotFather provided).
-- In a browser, visit `https://api.telegram.org/bot<TOKEN>/getUpdates`.
-- Look for `"chat":{"id":<number>,…}`. That number is your **chat ID**.
+- Run `python get_chat_id.py`, or visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and look for `"chat":{"id":<number>,…}`.
 
 ### 3. Configure the repo
 
@@ -45,12 +93,7 @@ Push this repo to GitHub, then go to **Settings → Secrets and variables → Ac
 
 | Name | Example | Notes |
 | --- | --- | --- |
-| `MOVIE_SLUG`     | `the-odyssey` | From the movie-details URL |
-| `TARGET_WEEKDAY` | `friday` | Any lowercase weekday name |
-| `TIMEZONE`       | `Africa/Cairo` | |
-| `MOVIE_BASE_URL` | _(optional)_ | Override the full movie-details URL; defaults to `https://district5.scenecinemas.com/movie-details/{movie}.html`. Use `{movie}` as a placeholder for `MOVIE_SLUG`, or set a fully-qualified URL for a different branch/movie. |
-
-You can find the movie slug by browsing scenecinemas.com — it appears in the URL when you open a movie page (e.g. `.../movie-details/the-odyssey.html` → `the-odyssey`).
+| `TIMEZONE` | `Africa/Cairo` | Default for watches that don't set their own |
 
 ### 4. Enable Actions
 
@@ -58,15 +101,17 @@ You can find the movie slug by browsing scenecinemas.com — it appears in the U
 
 ### 5. Test it
 
-**Actions tab → "Check Showtimes" → Run workflow.** The first successful run with showtimes available will Telegram you; subsequent runs for the same date will log `Already notified for ...` and exit.
-
-## Changing what's monitored
-
-Update the repo variables (`MOVIE_SLUG`, `TARGET_WEEKDAY`, `TIMEZONE`, and optionally `MOVIE_BASE_URL`). No code change required.
+**Actions tab → "Check Showtimes" → Run workflow.** The first successful run with showtimes available will Telegram you; subsequent runs for the same date log `Already notified for …` and exit.
 
 ## State file
 
-`state.json` stores `{"notified_for": "YYYYMMDD"}` after a notification, or `{"notified_for": null}` when fresh. To force a re-notification, edit it back to `null` and commit, or delete the file — the script will recreate it.
+`state.json` maps each watch id to the date it last notified for:
+
+```json
+{ "notified_for": { "odyssey-d5-friday": "20260731" } }
+```
+
+To force a re-notification, delete that watch's entry and commit. Deleting the whole file re-arms everything.
 
 ## Local dev
 
@@ -75,9 +120,10 @@ pip install -r requirements.txt pytest
 pytest -q
 ```
 
-To dry-run the script locally, export the env vars from the table above and run `python check_showtimes.py`. The script logs everything it does at INFO level.
+To dry-run locally, set `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` and run `python check_showtimes.py` — note this really does send Telegram messages and write `state.json`. Point `WATCHES_FILE` at a scratch config to try a watch without touching the committed one. The script logs everything it does at INFO level, prefixed with the watch id.
 
 ## Notes
 
 - GitHub free-tier scheduled workflows can drift 5–15 minutes during peak load. That's expected.
-- Showtimes are fetched from the site's own AJAX endpoint — no headless browser needed. If Scene Cinemas ever changes the fragment structure, `parse_showtimes` returns an empty result and the script exits cleanly (treated as "not yet") instead of crashing.
+- Showtimes are fetched from each site's normal endpoints — no headless browser. Both sites' WAFs reject plain `requests`, so fetches go through `curl_cffi` with Chrome TLS impersonation.
+- If a site changes its markup, the parser returns nothing and the run exits cleanly as "not yet" rather than crashing. For VOX that would be silent, so the script warns when a page has neither showtimes nor the expected "No showtimes could be found" notice.
