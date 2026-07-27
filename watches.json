@@ -13,6 +13,14 @@
       "cinema_slug": "city-centre-almaza",
       "target": { "date": "2026-08-06" },
       "notify_on": "bookable"
+    },
+    {
+      "id": "spiderman-moe-aug7",
+      "site": "vox",
+      "movie_slug": "spider-man-brand-new-day",
+      "cinema_slug": "mall-of-egypt",
+      "target": { "date": "2026-08-07" },
+      "notify_on": "bookable"
     }
   ]
 }
