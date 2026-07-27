@@ -2,6 +2,10 @@
 .env.*
 !.env.example
 
+# Local Claude Code settings — machine-specific, and permission entries can
+# embed literal secrets. Never commit.
+.claude/settings.local.json
+
 __pycache__/
 *.pyc
 .pytest_cache/
