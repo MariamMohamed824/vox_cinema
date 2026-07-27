@@ -36,6 +36,7 @@ from bs4 import BeautifulSoup
 from curl_cffi import requests as cffi_requests
 
 SCENE_MOVIE_BASE = "https://district5.scenecinemas.com/movie-details/{movie}.html"
+SCENE_CINEMA_NAME = "Scene Cinemas — District 5"
 SCENE_SHOWTIMES_URL = "{base}?business_day={date}&ajax=1"
 VOX_SHOWTIMES_URL = "https://egy.voxcinemas.com/showtimes?c={cinema}&m={movie}&d={date}"
 TELEGRAM_URL = "https://api.telegram.org/bot{token}/sendMessage"
@@ -127,6 +128,8 @@ class Site:
     # What a non-bookable time means on this site — Scene flags genuine sell-outs,
     # VOX uses one "unavailable" state for both sold out and not-yet-on-sale.
     soldout_label: str
+    # Cinema name to use when the watch has no cinema_slug (single-venue sites).
+    default_cinema: str = ""
 
 
 def load_config() -> Config:
@@ -325,9 +328,9 @@ def parse_showtimes_scene(html: str) -> "dict[str, list[Showtime]]":
 
 def scene_display_names(html: str, watch: Watch) -> "tuple[str, str]":
     """Return (movie_title, cinema_name); cinema comes from the fragment's branch label."""
-    movie = _title_from_slug(watch.movie_slug)
+    movie = title_from_slug(watch.movie_slug)
 
-    cinema = "Scene Cinemas — District 5"
+    cinema = SCENE_CINEMA_NAME
     soup = BeautifulSoup(html, "html.parser")
     branch = soup.find(class_="branch")
     if branch and branch.get_text(strip=True):
@@ -397,12 +400,12 @@ def vox_display_names(html: str, watch: Watch) -> "tuple[str, str]":
     """
     soup = BeautifulSoup(html, "html.parser")
 
-    movie = _title_from_slug(watch.movie_slug)
+    movie = title_from_slug(watch.movie_slug)
     heading = soup.select_one("article.movie-compare h2") or soup.select_one("section.showtimes h2")
     if heading and heading.get_text(strip=True):
         movie = re.sub(r"\s+", " ", heading.get_text(strip=True)).strip()
 
-    cinema = _title_from_slug(watch.cinema_slug)
+    cinema = title_from_slug(watch.cinema_slug)
     branch = soup.select_one(".dates h3.highlight") or soup.select_one("h3.highlight")
     if branch and branch.get_text(strip=True):
         cinema = re.sub(r"\s+", " ", branch.get_text(strip=True)).strip()
@@ -423,6 +426,7 @@ SITES: "dict[str, Site]" = {
         headers=SCENE_HEADERS,
         empty_is_expected=scene_empty_is_expected,
         soldout_label="sold out",
+        default_cinema=SCENE_CINEMA_NAME,
     ),
     "vox": Site(
         build_url=vox_url,
@@ -440,7 +444,7 @@ SITES: "dict[str, Site]" = {
 # --------------------------------------------------------------------------- output
 
 
-def _title_from_slug(slug: str) -> str:
+def title_from_slug(slug: str) -> str:
     return " ".join(w.capitalize() for w in slug.replace("_", "-").split("-"))
 
 

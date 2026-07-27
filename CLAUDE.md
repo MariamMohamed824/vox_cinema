@@ -20,7 +20,8 @@ pytest -q                                # full suite (tests/test_check_showtime
 pytest -q -k vox                         # single test / group by name substring
 python check_showtimes.py                # live run of every watch; WILL send Telegram + write state.json
 WATCHES_FILE=/tmp/scratch.json python check_showtimes.py   # dry-run against a scratch watch config
-python send_test_message.py              # verify Telegram delivery with a fake showtime payload
+python send_test_message.py              # one sample alert per watch (real wording), TEST-bannered
+python send_test_message.py <watch-id>   # ...or just one watch
 python get_chat_id.py                    # print chat IDs from getUpdates (message the bot first)
 ```
 

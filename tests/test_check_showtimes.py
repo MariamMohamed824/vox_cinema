@@ -308,7 +308,7 @@ def test_message_uses_per_site_soldout_wording():
 
 
 def test_message_headline_defaults_are_backwards_compatible():
-    """send_test_message.py calls format_message with the old signature."""
+    """format_message must stay callable without the label/headline args."""
     groups = {"Standard": [Showtime(time="9:00pm", href="https://x/1")]}
     assert "showtimes are live!" in format_message("M", "C", date(2026, 8, 6), groups)
 

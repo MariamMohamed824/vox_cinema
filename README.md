@@ -103,6 +103,8 @@ Push this repo to GitHub, then go to **Settings → Secrets and variables → Ac
 
 **Actions tab → "Check Showtimes" → Run workflow.** The first successful run with showtimes available will Telegram you; subsequent runs for the same date log `Already notified for …` and exit.
 
+To check delivery and formatting without waiting for real showtimes, run the **"Test Telegram"** workflow (or `python send_test_message.py` locally). It sends one sample alert per configured watch, using that watch's real site wording and trigger headline, each prefixed with a clear TEST banner. Pass a watch id to send just one.
+
 ## State file
 
 `state.json` maps each watch id to the date it last notified for:
